@@ -87,8 +87,8 @@ module.exports = function scrum(robot) {
     _saveAnswer(scrum);
     // TODO: send email summary
     if (FINAL_MESSAGE) res.send(FINAL_MESSAGE);
-    res.send('summary:');
-    res.send('` '+ JSON.stringify(scrum.answers) +' `');
+    //res.send('summary:');
+    //res.send('` '+ JSON.stringify(scrum.answers) +' `');
     scrums[channel.id] = false;
   }
 
