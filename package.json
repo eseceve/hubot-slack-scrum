@@ -1,7 +1,7 @@
 {
   "name": "hubot-slack-scrum",
   "description": "A hubot script that does a virtual scrum meeting with the Slack's hubot adapter",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "author": "eseceve <eseceve@gmail.com>",
   "license": "MIT",
   "keywords": [
@@ -10,7 +10,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/eseceve/hubot-slack-scrum.git"
+    "url": "git+https://github.com/eseceve/hubot-slack-scrum.git"
   },
   "bugs": {
     "url": "https://github.com/eseceve/hubot-slack-scrum/issues"
@@ -18,6 +18,6 @@
   "dependencies": {},
   "devDependencies": {},
   "main": "index.js",
-  "scripts": {
-  }
+  "scripts": {},
+  "homepage": "https://github.com/eseceve/hubot-slack-scrum#readme"
 }
