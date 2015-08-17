@@ -10,10 +10,10 @@
 //   HUBOT_SLACKSCRUM_QC
 //
 // Commands:
-//   scrum start
-//   scrum next question
-//   scrum next user
-//   scrum end
+//   hubot scrum start
+//   hubot scrum end
+//   next
+//   next user <reason>
 //
 // Author:
 //   @eseceve
@@ -42,8 +42,8 @@ module.exports = function scrum(robot) {
   var scrums = [];
 
   robot.respond(/scrum start/i, start);
-  robot.respond(/scrum next question/i, question);
-  robot.respond(/scrum next user/i, next);
+  robot.hear(/next/i, next);
+  robot.hear(/next user(.*)/i, nextUser);
   robot.respond(/scrum end/i, end);
 
 
@@ -85,11 +85,50 @@ module.exports = function scrum(robot) {
     var scrum = _getScrum(channel);
     if (!scrum) return _requireStart(res);
     _saveAnswer(scrum);
-    // TODO: send email summary
     if (FINAL_MESSAGE) res.send(FINAL_MESSAGE);
+    // TODO: send email summary
     //res.send('summary:');
     //res.send('` '+ JSON.stringify(scrum.answers) +' `');
+    //res.send('` '+ JSON.stringify(scrum.reasons) +' `');
     scrums[channel.id] = false;
+  }
+
+
+  /**
+   *
+   * @jsdoc function
+   * @name nextUser
+   * @description
+   *
+   * [description]
+   *
+   * @param {Object} res [description]
+   * @param {Boolean} force [description]
+   *
+   */
+  function nextUser(res, force) {
+    var channel = _getChannel(res);
+    var scrum = _getScrum(channel);
+    var reason = res.match[1];
+    var user;
+
+    if (!force) {
+      if (res.message.text.indexOf('next user') !== 0 || !scrum) return;
+      if (!reason) return res.send(
+        'Command `next user <reason>` require a <reason>');
+    }
+
+    if (reason) {
+      user = scrum.members[scrum.user];
+      scrum.reasons[user.id] = reason;
+    } else {
+      _saveAnswer(scrum);
+    }
+
+    scrum.user++;
+    scrum.question = 0;
+    if (scrum.user >= scrum.members.length) return end(res);
+    next(res);
   }
 
 
@@ -107,31 +146,8 @@ module.exports = function scrum(robot) {
   function next(res) {
     var channel = _getChannel(res);
     var scrum = _getScrum(channel);
-    if (!scrum) return _requireStart(res);
-    _saveAnswer(scrum);
-    scrum.user++;
-    scrum.question = 0;
-    if (scrum.user >= scrum.members.length) return end(res);
-    question(res);
-  }
-
-
-  /**
-   *
-   * @jsdoc function
-   * @name question
-   * @description
-   *
-   * [description]
-   *
-   * @param {Object} res [description]
-   *
-   */
-  function question(res) {
-    var channel = _getChannel(res);
-    var scrum = _getScrum(channel);
-    if (!scrum) return _requireStart(res);
-    if (scrum.question === QUESTIONS.length) return next(res);
+    if (res.message.text !== 'next' || !scrum) return;
+    if (scrum.question === QUESTIONS.length) return nextUser(res, true);
     _doQuestion(scrum);
   }
 
@@ -179,6 +195,7 @@ module.exports = function scrum(robot) {
       answers: {},
       channel: channel,
       question: 0,
+      reasons: {},
       user: 0
     };
     scrum.members = channel.members.map(function getUserObject(userID) {
@@ -244,6 +261,8 @@ module.exports = function scrum(robot) {
    *
    */
   function _saveAnswer(scrum) {
+    // TODO: only save current answer
+    // TODO: prevent save `undefined` question
     var history = scrum.channel.getHistory();
     var noMore = false;
     var user = scrum.members[scrum.user];
