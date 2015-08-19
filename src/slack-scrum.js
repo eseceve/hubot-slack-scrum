@@ -11,7 +11,6 @@
 //
 // Commands:
 //   hubot scrum start
-//   hubot scrum end
 //   next
 //   next user <reason>
 //
@@ -31,12 +30,6 @@ var QUESTIONS = [
 ];
 
 
-var INITIAL_MESSAGE = env.HUBOT_SLACKSCRUM_INITIAL_MESSAGE || 
-  'Initial message';
-var FINAL_MESSAGE = env.HUBOT_SLACKSCRUM_FINAL_MESSAGE || 
-  'Final message';
-
-
 module.exports = function scrum(robot) {
   var slackAdapterClient = robot.adapter.client;
   var scrums = [];
@@ -44,7 +37,6 @@ module.exports = function scrum(robot) {
   robot.respond(/scrum start/i, start);
   robot.hear(/next/i, next);
   robot.hear(/next user(.*)/i, nextUser);
-  robot.respond(/scrum end/i, end);
 
 
   /**
@@ -64,7 +56,7 @@ module.exports = function scrum(robot) {
 
     if (scrums[channel.id]) return;
     scrum = _getScrum(channel, true);
-    if (INITIAL_MESSAGE) res.send(INITIAL_MESSAGE);
+    res.send("Hi <!channel>, let's start a new Scrum");
     _doQuestion(scrum);
   }
 
@@ -72,7 +64,7 @@ module.exports = function scrum(robot) {
   /**
    *
    * @jsdoc function
-   * @name end
+   * @name _finish
    * @description
    *
    * [description]
@@ -80,12 +72,12 @@ module.exports = function scrum(robot) {
    * @param {Object} res [description]
    *
    */
-  function end(res) {
+  function _finish(res) {
     var channel = _getChannel(res);
     var scrum = _getScrum(channel);
     if (!scrum) return _requireStart(res);
     _saveAnswer(scrum);
-    if (FINAL_MESSAGE) res.send(FINAL_MESSAGE);
+    res.send("Thanks <!channel> for participating =)");
     // TODO: send email summary
     //res.send('summary:');
     //res.send('` '+ JSON.stringify(scrum.answers) +' `');
@@ -127,7 +119,7 @@ module.exports = function scrum(robot) {
 
     scrum.user++;
     scrum.question = 0;
-    if (scrum.user >= scrum.members.length) return end(res);
+    if (scrum.user >= scrum.members.length) return _finish(res);
     next(res);
   }
 
