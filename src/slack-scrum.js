@@ -66,6 +66,7 @@ module.exports = function scrum(robot) {
 
   function nextUser(res, force) {
     var channel = _getChannel(res.message.room);
+    var text = res.message.text.toLowerCase();
     var reason;
     var scrum;
     var user;
@@ -76,7 +77,7 @@ module.exports = function scrum(robot) {
     reason = res.match[1];
 
     if (!force) {
-      if (res.message.text.indexOf('next user') !== 0 || !scrum) return;
+      if (text.indexOf('next user') !== 0 || !scrum) return;
       if (!reason) return res.send(
         'Command `next user <reason>` require a <reason>');
     }
