@@ -32,77 +32,48 @@ var QUESTIONS = [
 
 module.exports = function scrum(robot) {
   var slackAdapterClient = robot.adapter.client;
-  var scrums = [];
 
   robot.respond(/scrum start/i, start);
   robot.hear(/next/i, next);
   robot.hear(/next user(.*)/i, nextUser);
 
 
-  /**
-   *
-   * @jsdoc function
-   * @name start
-   * @description
-   *
-   * [description]
-   *
-   * @param {Object} res [description]
-   *
-   */
   function start(res) {
-    var channel = _getChannel(res);
+    var channel = _getChannel(res.message.room);
     var scrum;
 
-    if (scrums[channel.id]) return;
-    scrum = _getScrum(channel, true);
+    if (_scrumExists(channel)) return;
+    scrum = _getScrum(channel);
     res.send("Hi <!channel>, let's start a new Scrum");
+
     _doQuestion(scrum);
   }
 
 
-  /**
-   *
-   * @jsdoc function
-   * @name _finish
-   * @description
-   *
-   * [description]
-   *
-   * @param {Object} res [description]
-   *
-   */
-  function _finish(res) {
-    var channel = _getChannel(res);
-    var scrum = _getScrum(channel);
-    if (!scrum) return _requireStart(res);
-    _saveAnswer(scrum);
-    res.send("Thanks <!channel> for participating =)");
-    // TODO: send email summary
-    //res.send('summary:');
-    //res.send('` '+ JSON.stringify(scrum.answers) +' `');
-    //res.send('` '+ JSON.stringify(scrum.reasons) +' `');
-    scrums[channel.id] = false;
+  function next(res) {
+    var channel = _getChannel(res.message.room);
+    var scrum;
+
+    if (!_scrumExists(channel)) return;
+    if (res.message.text.toLowerCase().trim() !== 'next') return;
+
+    scrum = _getScrum(channel);
+
+    if (scrum.question === QUESTIONS.length) return nextUser(res, true);
+    _doQuestion(scrum);
   }
 
 
-  /**
-   *
-   * @jsdoc function
-   * @name nextUser
-   * @description
-   *
-   * [description]
-   *
-   * @param {Object} res [description]
-   * @param {Boolean} force [description]
-   *
-   */
   function nextUser(res, force) {
-    var channel = _getChannel(res);
-    var scrum = _getScrum(channel);
-    var reason = res.match[1];
+    var channel = _getChannel(res.message.room);
+    var reason;
+    var scrum;
     var user;
+
+    if (!_scrumExists(channel)) return;
+
+    scrum = _getScrum(channel);
+    reason = res.match[1];
 
     if (!force) {
       if (res.message.text.indexOf('next user') !== 0 || !scrum) return;
@@ -119,164 +90,108 @@ module.exports = function scrum(robot) {
 
     scrum.user++;
     scrum.question = 0;
-    if (scrum.user >= scrum.members.length) return _finish(res);
+    if (scrum.user >= scrum.members.length) return _finish(scrum);
     next(res);
   }
 
 
-  /**
-   *
-   * @jsdoc function
-   * @name next
-   * @description
-   *
-   * [description]
-   *
-   * @param {Object} res [description]
-   *
-   */
-  function next(res) {
-    var channel = _getChannel(res);
-    var scrum = _getScrum(channel);
-    if (res.message.text !== 'next' || !scrum) return;
-    if (scrum.question === QUESTIONS.length) return nextUser(res, true);
-    _doQuestion(scrum);
-  }
-
-
-  /**
-   *
-   * @jsdoc function
-   * @name _doQuestion
-   * @private
-   * @description
-   *
-   * [description]
-   *
-   * @param {Object} scrum [description]
-   *
-   */
-  function _doQuestion(scrum) {
-    var user = scrum.members[scrum.user];
-    var message = '<@' + user.id + '> ' + QUESTIONS[scrum.question];
-    _saveAnswer(scrum);
-    scrum.channel.send(message);
-    scrum.question++;
-  }
-
-
-  /**
-   *
-   * @jsdoc function
-   * @name _getScrum
-   * @private
-   * @description
-   *
-   * [description]
-   *
-   * @param  {Object} res [description]
-   * @param  {Boolean=} start [description]
-   * @return {Object|Boolean}
-   *
-   */
-  function _getScrum(channel, start) {
-    var scrum = scrums[channel.id];
-    if (scrum) return scrum;
-    if (!scrum && !start) return false;
-    scrum = {
+  function _createScrum(channel) {
+    var scrum = {
       answers: {},
       channel: channel,
       question: 0,
       reasons: {},
       user: 0
     };
+
     scrum.members = channel.members.map(function getUserObject(userID) {
       var user = slackAdapterClient.getUserByID(userID);
       return user;
     }).filter(function filterBots(user) {
       return !user.is_bot;
     });
-    scrums[channel.id] = scrum;
+
     return scrum;
   }
 
 
-  /**
-   *
-   * @jsdoc function
-   * @name _getChannel
-   * @private
-   * @description
-   *
-   * [description]
-   *
-   * @param  {Object} res [description]
-   * @return {Object}
-   *
-   */
-  function _getChannel(res) {
-    var roomName = res.message.room;
+  function _doQuestion(scrum) {
+    var user = scrum.members[scrum.user];
+    var message = '<@' + user.id + '> ' + QUESTIONS[scrum.question];
+
+    _saveAnswer(scrum);
+    scrum.channel.send(message);
+    scrum.question++;
+  }
+
+
+  function _finish(scrum) {
+    _saveAnswer(scrum);
+    res.send("Thanks <!channel> for participating =)");
+    // TODO: send email summary
+    robot.brain.set(_getScrumID(scrum.channel), false);
+  }
+
+
+  function _getChannel(roomName) {
     var channel = slackAdapterClient.getChannelByName(roomName);
-    if (!channel) { channel = slackAdapterClient.getGroupByName(roomName); }
-    if (!channel) { throw new Error('Room must be a channel or group'); }
+
+    if (!channel) channel = slackAdapterClient.getGroupByName(roomName);
+    if (!channel) throw new Error('Room must be a channel or group');
+
     return channel;
   }
 
 
-  /**
-   *
-   * @jsdoc function
-   * @name _requireStart
-   * @private
-   * @description
-   *
-   * [description]
-   *
-   * @param  {Object} res [description]
-   *
-   */
-  function _requireStart(res) {
-    res.send('Require `scrum start` command');
+  function _getScrum(channel) {
+    var scrum;
+
+    if (_scrumExists(channel)) return robot.brain.get(_getScrumID(channel));
+
+    scrum = _createScrum(channel);
+    robot.brain.get(_getScrumID(channel), scrum);
+
+    return scrum;
   }
 
 
-  /**
-   *
-   * @jsdoc function
-   * @name _saveAnswer
-   * @private
-   * @description
-   *
-   * [description]
-   *
-   * @param  {Object} scrum [description]
-   *
-   */
+  function _getScrumID(channel) {
+    return 'HSS-'+channel.id;
+  }
+
+
   function _saveAnswer(scrum) {
     // TODO: only save current answer
     // TODO: prevent save `undefined` question
     var history = scrum.channel.getHistory();
     var noMore = false;
     var user = scrum.members[scrum.user];
+
     if (!user || !scrum.user && !scrum.question) return;
-    scrum.answers[user.id] = scrum.answers[user.id] || {};
-    scrum.answers[user.id][QUESTIONS[scrum.question-1]] = Object.keys(history)
+
+    scrum.answers[user.id][scrum.question-1] = Object.keys(history)
       .reverse()
       .filter(function checkMessage(messageTS) {
         var message = history[messageTS];
+
         if (noMore) return false;
         if (!message) return false;
         if (message.user !== user.id) return false;
-        if (message.text.indexOf('scrum ') !== -1) {
+
+        if (message.text.indexOf('next') === 0) {
           noMore = true;
           return false;
         }
+
         return true;
       })
       .map(function getText(messageTS) {
-        var message = history[messageTS];
-        return message.text;
+        return history[messageTS].text;
       })
       .reverse();
+  }
+
+  function _scrumExists(channel) {
+    return !!robot.brain.get(_getScrumID(channel));
   }
 };
