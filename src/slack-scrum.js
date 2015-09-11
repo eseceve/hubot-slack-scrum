@@ -50,12 +50,12 @@ module.exports = function scrum(robot) {
   }
 
 
-  function next(res) {
+  function next(res, force) {
     var channel = _getChannel(res.message.room);
     var scrum;
 
     if (!_scrumExists(channel)) return;
-    if (res.message.text.toLowerCase().trim() !== 'next') return;
+    if (!force && res.message.text.toLowerCase().trim() !== 'next') return;
 
     scrum = _getScrum(channel);
 
@@ -92,7 +92,7 @@ module.exports = function scrum(robot) {
     scrum.user++;
     scrum.question = 0;
     if (scrum.user >= scrum.members.length) return _finish(scrum);
-    next(res);
+    next(res, true);
   }
 
 
@@ -128,7 +128,7 @@ module.exports = function scrum(robot) {
 
   function _finish(scrum) {
     _saveAnswer(scrum);
-    res.send("Thanks <!channel> for participating =)");
+    scrum.channel.send("Thanks <!channel> for participating =)");
     // TODO: send email summary
     robot.brain.set(_getScrumID(scrum.channel), false);
   }
@@ -150,7 +150,7 @@ module.exports = function scrum(robot) {
     if (_scrumExists(channel)) return robot.brain.get(_getScrumID(channel));
 
     scrum = _createScrum(channel);
-    robot.brain.get(_getScrumID(channel), scrum);
+    robot.brain.set(_getScrumID(channel), scrum);
 
     return scrum;
   }
@@ -168,7 +168,9 @@ module.exports = function scrum(robot) {
     var noMore = false;
     var user = scrum.members[scrum.user];
 
-    if (!user || !scrum.user && !scrum.question) return;
+    if (!user || !scrum.answers[user.id] || !scrum.user && !scrum.question) {
+      return;
+    }
 
     scrum.answers[user.id][scrum.question-1] = Object.keys(history)
       .reverse()
@@ -190,6 +192,8 @@ module.exports = function scrum(robot) {
         return history[messageTS].text;
       })
       .reverse();
+
+    //TODO: robot.brain.set(_getScrumID(scrum.channel), scrum);
   }
 
   function _scrumExists(channel) {
