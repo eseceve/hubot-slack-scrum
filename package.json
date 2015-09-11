@@ -1,7 +1,7 @@
 {
   "name": "hubot-slack-scrum",
   "description": "A hubot script that does a virtual scrum meeting with the Slack's hubot adapter",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "author": "eseceve <eseceve@gmail.com>",
   "license": "MIT",
   "keywords": [
