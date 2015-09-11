@@ -85,6 +85,7 @@ module.exports = function scrum(robot) {
     if (reason) {
       user = scrum.members[scrum.user];
       scrum.reasons[user.id] = reason;
+      robot.brain.set(_getScrumID(scrum.channel), scrum);
     } else {
       _saveAnswer(scrum);
     }
@@ -97,9 +98,11 @@ module.exports = function scrum(robot) {
 
 
   function _createScrum(channel) {
+    var history = Object.keys(channel.getHistory()).reverse();
     var scrum = {
       answers: {},
       channel: channel,
+      lastMessageTS: history[0],
       question: 0,
       reasons: {},
       user: 0
@@ -164,37 +167,47 @@ module.exports = function scrum(robot) {
   function _saveAnswer(scrum) {
     // TODO: only save current answer
     // TODO: prevent save `undefined` question
+    var firstMessage = true;
     var history = scrum.channel.getHistory();
     var noMore = false;
     var user = scrum.members[scrum.user];
+    var lastMessageTS;
 
-    if (!user || !scrum.answers[user.id] || !scrum.user && !scrum.question) {
-      return;
-    }
+    if (!user || !scrum.question) return;
 
+    scrum.answers[user.id] = scrum.answers[user.id] || [];
     scrum.answers[user.id][scrum.question-1] = Object.keys(history)
       .reverse()
       .filter(function checkMessage(messageTS) {
         var message = history[messageTS];
+        var filtered = true;
 
+        if (firstMessage) {
+          lastMessageTS = messageTS;
+          firstMessage = false;
+          return false;
+        }
         if (noMore) return false;
         if (!message) return false;
         if (message.user !== user.id) return false;
 
-        if (message.text.indexOf('next') === 0) {
+        if (message.text.indexOf('next') === 0 ||
+          scrum.lastMessageTS === messageTS) {
           noMore = true;
-          return false;
+          filtered = false;
         }
 
-        return true;
+        return filtered;
       })
       .map(function getText(messageTS) {
         return history[messageTS].text;
       })
       .reverse();
 
-    //TODO: robot.brain.set(_getScrumID(scrum.channel), scrum);
+    scrum.lastMessageTS = lastMessageTS;
+    robot.brain.set(_getScrumID(scrum.channel), scrum);
   }
+
 
   function _scrumExists(channel) {
     return !!robot.brain.get(_getScrumID(channel));
