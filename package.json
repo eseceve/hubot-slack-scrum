@@ -15,7 +15,10 @@
   "bugs": {
     "url": "https://github.com/eseceve/hubot-slack-scrum/issues"
   },
-  "dependencies": {},
+  "dependencies": {
+    "jade": "^1.11.0",
+    "mandrill-api": "^1.0.45"
+  },
   "devDependencies": {},
   "main": "index.js",
   "scripts": {},

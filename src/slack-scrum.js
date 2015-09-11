@@ -3,48 +3,62 @@
 //
 // Dependencies:
 //   hubot-slack
+//   jade
+//   mandrill-api
 //
 // Configuartion:
-//   HUBOT_SLACKSCRUM_QA
-//   HUBOT_SLACKSCRUM_QB
-//   HUBOT_SLACKSCRUM_QC
+//   HSS_QUESTION_FIRST
+//   HSS_QUESTION_SECOND
+//   HSS_QUESTION_THIRD
+//   HSS_MANDRILL_API_KEY
 //
 // Commands:
-//   hubot scrum start
+//   hubot scrum start <email>
 //   next
 //   next user <reason>
 //
 // Author:
 //   @eseceve
+
 var env = process.env;
 
 var QUESTIONS = [
-  env.HUBOT_SLACKSCRUM_QA ||
+  env.HSS_QUESTION_FIRST ||
     'What did you do yesterday that helped the development team meet the' +
     ' sprint goal?',
-  env.HUBOT_SLACKSCRUM_QB ||
+  env.HSS_QUESTION_SECOND ||
     'What will you do today to help the development team meet the sprint goal?',
-  env.HUBOT_SLACKSCRUM_QC ||
+  env.HSS_QUESTION_THIRD ||
     'Do you see any impediment that prevents me or the development team from' +
     ' meeting the sprint goal?'
 ];
+
+var jade = require('jade');
+var mandrill = require('mandrill-api/mandrill');
 
 
 module.exports = function scrum(robot) {
   var slackAdapterClient = robot.adapter.client;
 
-  robot.respond(/scrum start/i, start);
+
+  robot.respond(/scrum start(\s([a-zA-Z0-9+._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}))?/i, start);
   robot.hear(/next/i, next);
   robot.hear(/next user(.*)/i, nextUser);
 
 
   function start(res) {
     var channel = _getChannel(res.message.room);
+    var email = res.match[2];
     var scrum;
 
     if (_scrumExists(channel)) return;
     scrum = _getScrum(channel);
     res.send("Hi <!channel>, let's start a new Scrum");
+
+    if (email) {
+      scrum.email = email;
+      robot.brain.set(_getScrumID(channel), scrum);
+    }
 
     _doQuestion(scrum);
   }
@@ -83,8 +97,7 @@ module.exports = function scrum(robot) {
     }
 
     if (reason) {
-      user = scrum.members[scrum.user];
-      scrum.reasons[user.id] = reason;
+      scrum.members[scrum.user].reason = reason.trim();
       robot.brain.set(_getScrumID(scrum.channel), scrum);
     } else {
       _saveAnswer(scrum);
@@ -110,6 +123,8 @@ module.exports = function scrum(robot) {
 
     scrum.members = channel.members.map(function getUserObject(userID) {
       var user = slackAdapterClient.getUserByID(userID);
+      user.reason = '';
+      user.answers = [];
       return user;
     }).filter(function filterBots(user) {
       return !user.is_bot;
@@ -132,7 +147,7 @@ module.exports = function scrum(robot) {
   function _finish(scrum) {
     _saveAnswer(scrum);
     scrum.channel.send("Thanks <!channel> for participating =)");
-    // TODO: send email summary
+    _sendEmail(scrum);
     robot.brain.set(_getScrumID(scrum.channel), false);
   }
 
@@ -165,8 +180,6 @@ module.exports = function scrum(robot) {
 
 
   function _saveAnswer(scrum) {
-    // TODO: only save current answer
-    // TODO: prevent save `undefined` question
     var firstMessage = true;
     var history = scrum.channel.getHistory();
     var noMore = false;
@@ -175,8 +188,7 @@ module.exports = function scrum(robot) {
 
     if (!user || !scrum.question) return;
 
-    scrum.answers[user.id] = scrum.answers[user.id] || [];
-    scrum.answers[user.id][scrum.question-1] = Object.keys(history)
+    user.answers[scrum.question-1] = Object.keys(history)
       .reverse()
       .filter(function checkMessage(messageTS) {
         var message = history[messageTS];
@@ -200,16 +212,42 @@ module.exports = function scrum(robot) {
         return filtered;
       })
       .map(function getText(messageTS) {
-        return history[messageTS].text;
+        return history[messageTS].text.trim();
       })
       .reverse();
 
     scrum.lastMessageTS = lastMessageTS;
+    scrum.members[scrum.user] = user;
     robot.brain.set(_getScrumID(scrum.channel), scrum);
   }
 
 
   function _scrumExists(channel) {
     return !!robot.brain.get(_getScrumID(channel));
+  }
+
+
+  function _sendEmail(scrum) {
+    if (!scrum.email) return;
+    if (!env.HSS_MANDRILL_API_KEY) return;
+
+    var mandrillClient = new mandrill.Mandrill(env.HSS_MANDRILL_API_KEY);
+    var html = jade.compileFile(__dirname + '/email.jade')({
+      questions: QUESTIONS,
+      members: scrum.members
+    });
+
+    mandrillClient.messages.send({
+      message: {
+        html: html,
+        subject: "[HSS] scrum metting " + new Date().toLocaleDateString(),
+        from_email: "no.replay@example.org",
+        from_name: "Hubot Slack Scrum",
+        to: [{
+          email: scrum.email,
+          type: "to"
+        }]
+      },
+    });
   }
 };
